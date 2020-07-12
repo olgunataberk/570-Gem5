@@ -97,6 +97,10 @@ class BaseSimpleCPU : public BaseCPU
 
     std::vector<SimpleExecContext*> threadInfo;
     std::list<ThreadID> activeThreads;
+    int recentComputeInsts;
+    int recentMemInsts;
+    long int numTotalInsts;
+    std::unordered_map<Addr, std::deque<bool>> branchHistory;
 
     /** Current instruction */
     TheISA::MachInst inst;

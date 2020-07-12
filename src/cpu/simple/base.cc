@@ -117,6 +117,9 @@ BaseSimpleCPU::BaseSimpleCPU(BaseSimpleCPUParams *p)
     } else {
         checker = NULL;
     }
+    recentComputeInsts = 0;
+    recentMemInsts = 0;
+    numTotalInsts = 0;
 }
 
 void
@@ -166,6 +169,7 @@ BaseSimpleCPU::countInst()
     if (!curStaticInst->isMicroop() || curStaticInst->isLastMicroop()) {
         t_info.numInst++;
         t_info.numInsts++;
+        numTotalInsts++;
 
         system->totalNumInsts++;
         t_info.thread->funcExeInst++;
@@ -621,13 +625,48 @@ BaseSimpleCPU::postExecute()
         t_info.numCondCtrlInsts++;
     }
 
+    // Atb: Keep track of the number of memory/compuye
+    // instructions executed in a 100-instruction window.
+    if (curStaticInst->isLoad() || 
+        curStaticInst->isStore() || 
+        curStaticInst->isAtomic()){ 
+        recentMemInsts++;
+        if(recentMemInsts > 100)
+            recentMemInsts = 100;
+    }
+    else if(numTotalInsts > 100)
+    {
+        recentMemInsts--;
+        if(recentMemInsts < 0)
+            recentMemInsts = 0;   
+ 
+    }
+
+/*
+    if (curStaticInst->isInteger() || 
+        curStaticInst->isFloating() || 
+        curStaticInst->isVector())
+    {
+        recentComputeInsts++;
+        if(recentComputeInsts > 100)
+            recentComputeInsts = 100;
+    }
+    else if(numTotalInsts > 100)
+    {
+        recentComputeInsts--;    
+        if(recentComputeInsts < 0)
+            recentComputeInsts = 0;
+    }
+*/
     //result bus acceses
     if (curStaticInst->isLoad()){
         t_info.numLoadInsts++;
     }
+    
 
     if (curStaticInst->isStore() || curStaticInst->isAtomic()){
         t_info.numStoreInsts++;
+        recentMemInsts++;
     }
     /* End power model statistics */
 
@@ -654,6 +693,8 @@ BaseSimpleCPU::advancePC(const Fault &fault)
 
     const bool branching(thread->pcState().branching());
 
+    TheISA::PCState staleState = thread->pcState();
+
     //Since we're moving to a new pc, zero out the offset
     t_info.fetchOffset = 0;
     if (fault != NoFault) {
@@ -667,6 +708,50 @@ BaseSimpleCPU::advancePC(const Fault &fault)
             TheISA::PCState pcState = thread->pcState();
             TheISA::advancePC(pcState, curStaticInst);
             thread->pcState(pcState);
+        }
+    }
+
+    // Atb: we want to print our "samples" here,
+    // this is where branches are resolved
+    if (curStaticInst && curStaticInst -> isControl())
+    {
+        std::string hist = "";
+        for (auto it = branchHistory[staleState.pc()].cbegin(); 
+                it != branchHistory[staleState.pc()].cend(); ++it)
+            hist += *it ? "1" : "0";
+
+        std::string sourceRegs = "";
+        for(int i = 0 ; i < curStaticInst->numSrcRegs() - 1 ; i++)
+            sourceRegs += std::to_string(curStaticInst->srcRegIdx(i).index()) + ",";
+        sourceRegs += std::to_string(curStaticInst->
+                    srcRegIdx(curStaticInst->numSrcRegs()-1).index());
+
+        cprintf("%d,%d,%ld,%ld,%s,%s,%s\n", 100-recentMemInsts, recentMemInsts,
+            staleState.pc(), thread->pcState().pc(),
+            hist.c_str(), sourceRegs.c_str(),
+            branching ? "1" : "0");
+
+        // Atb: Update this branch's history
+        if (branchHistory.find(staleState.pc()) == branchHistory.end()) {
+            std::deque<bool> bqueue(9, false);
+            bqueue.push_back(branching);
+            branchHistory[staleState.pc()] = bqueue;
+        } else
+        {
+            std::deque<bool> bqueue = branchHistory[staleState.pc()];
+            bqueue.push_back(branching);
+            if(bqueue.size() > 10)
+                bqueue.pop_front();
+            /* Just some debugging, nothing to see here
+            std::string hist = "";
+            for(int i = 0 ; i < 10 ; i++)
+                hist += branchHistory[staleState.pc()][i] ? "1" : "0";
+            std::string hist2 = "";
+            for(int i = 0 ; i < 10 ; i++)
+                hist2 += bqueue[i] ? "1" : "0";
+            cprintf("0x%x:%s-%s\n", staleState.pc(), hist.c_str(), hist2.c_str());
+            */
+            branchHistory[staleState.pc()] = bqueue;
         }
     }
 
