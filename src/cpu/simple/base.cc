@@ -721,7 +721,7 @@ BaseSimpleCPU::advancePC(const Fault &fault)
             hist += *it ? "1" : "0";
 
         std::string sourceRegs = "";
-        for(int i = 0 ; i < curStaticInst->numSrcRegs() - 1 ; i++)
+        for(int i = 0 ; i < 1 /*curStaticInst->numSrcRegs() - 1*/ ; i++)
             sourceRegs += std::to_string(curStaticInst->srcRegIdx(i).index()) + ",";
         sourceRegs += std::to_string(curStaticInst->
                     srcRegIdx(curStaticInst->numSrcRegs()-1).index());
