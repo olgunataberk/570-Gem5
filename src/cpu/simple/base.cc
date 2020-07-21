@@ -719,12 +719,14 @@ BaseSimpleCPU::advancePC(const Fault &fault)
         for (auto it = branchHistory[staleState.pc()].cbegin(); 
                 it != branchHistory[staleState.pc()].cend(); ++it)
             hist += *it ? "1" : "0";
+        if(branchHistory[staleState.pc()].size() == 0)
+            hist = "0";
 
         std::string sourceRegs = "";
         for(int i = 0 ; i < 1 /*curStaticInst->numSrcRegs() - 1*/ ; i++)
             sourceRegs += std::to_string(curStaticInst->srcRegIdx(i).index()) + ",";
         sourceRegs += std::to_string(curStaticInst->
-                    srcRegIdx(curStaticInst->numSrcRegs()-1).index());
+                    srcRegIdx(1).index());
 
         cprintf("%d,%d,%ld,%ld,%s,%s,%s\n", 100-recentMemInsts, recentMemInsts,
             staleState.pc(), thread->pcState().pc(),
